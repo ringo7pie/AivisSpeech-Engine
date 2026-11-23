@@ -105,7 +105,6 @@ def quantize_model(aivm_model_uuid: str, source: Path) -> Path:
     """source を変換して置き場に書き、変換済みのパスを返す（失敗は例外）。"""
     import onnx
     from onnxruntime.quantization import CalibrationMethod, QuantFormat, QuantType, quantize_static
-    from onnxruntime.quantization.shape_inference import quant_pre_process
 
     model_path, marker = quantized_paths(aivm_model_uuid)
     model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,7 +112,9 @@ def quantize_model(aivm_model_uuid: str, source: Path) -> Path:
     partial = model_path.with_suffix(".partial")
     started = time.time()
     try:
-        quant_pre_process(str(source), str(prepared), skip_symbolic_shape=True)
+        # 前処理は onnx の形の推定だけ（onnxruntime の quant_pre_process は実行時に検索パスを足して fusion_utils を読むので、PyInstaller で固めた run.exe では
+        # ModuleNotFoundError になる。モデルは作るときに onnxsim で最適化済み）。
+        onnx.shape_inference.infer_shapes_path(str(source), str(prepared))
         excluded = [node.name for node in onnx.load(str(prepared), load_external_data=False).graph.node if re.search(EXCLUDE_PATTERN, node.name)]
         quantize_static(
             str(prepared),
