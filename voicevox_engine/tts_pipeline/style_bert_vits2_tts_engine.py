@@ -72,10 +72,13 @@ class StyleBertVITS2TTSEngine(TTSEngine):
         use_gpu: bool = False,
         load_all_models: bool = False,
         bert_model_cache_dir: Path | None = None,
+        use_quantized_models: bool = False,
     ) -> None:
         self.aivm_manager = aivm_manager
         self.use_gpu = use_gpu
         self.load_all_models = load_all_models
+        # DungeonQuest の改造: 8bit に変換済みの声のモデルがあれば、そちらを読む（dq_quantize.py。元のモデルには触らない）
+        self.use_quantized_models = use_quantized_models
 
         # BERT モデルのキャッシュディレクトリ
         self._bert_model_cache_dir = (
@@ -312,10 +315,20 @@ class StyleBertVITS2TTSEngine(TTSEngine):
         assert aivm_metadata.style_vectors is not None
         style_vectors = np.load(BytesIO(aivm_metadata.style_vectors))
 
+        # DungeonQuest の改造: 8bit に変換済みの物があり、元のファイルと合っていれば、そちらを読む
+        model_path = aivm_info.file_path
+        if self.use_quantized_models:
+            from .dq_quantize import find_quantized
+
+            quantized = find_quantized(aivm_model_uuid, Path(aivm_info.file_path))
+            if quantized is not None:
+                model_path = quantized
+                logger.info(f"Using 8-bit model for {aivm_info.manifest.name}: {quantized}")
+
         # 音声合成モデルをロード
         tts_model = TTSModel(
             # 音声合成モデルのパスとして、AIVMX ファイル (ONNX 互換) のパスを指定
-            model_path=aivm_info.file_path,
+            model_path=model_path,
             # config_path とあるが、HyperParameters の Pydantic モデルを直接指定できる
             config_path=hyper_parameters,
             # style_vec_path とあるが、style_vectors の NDArray を直接指定できる

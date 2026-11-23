@@ -210,6 +210,8 @@ class _CLIArgs:
     port: int | None
     use_gpu: bool | None
     load_all_models: bool
+    quantize_models: bool
+    use_quantized_models: bool
     output_log_utf8: bool
     cors_policy_mode: CorsPolicyMode | None
     allow_origins: list[str] | None
@@ -294,6 +296,17 @@ def read_cli_arguments(envs: Envs) -> _CLIArgs:
         "--load_all_models",
         action="store_true",
         help="起動時に全ての音声合成モデルを読み込みます。",
+    )
+    # DungeonQuest の改造（2026-11-23。voicevox_engine/tts_pipeline/dq_quantize.py）
+    parser.add_argument(
+        "--quantize_models",
+        action="store_true",
+        help="入っている音声合成モデルを 8bit に変換して <データの置き場>/QuantizedModels に置き、サーバーを起動せずに終わります（デコーダーは 32bit のまま。元のモデルには触りません）。",
+    )
+    parser.add_argument(
+        "--use_quantized_models",
+        action="store_true",
+        help="8bit に変換済みの音声合成モデルがあれば、そちらを読み込みます（メモリが約 4 割減ります）。",
     )
 
     # 引数へcpu_num_threadsの指定がなければ、環境変数をロールします。
@@ -451,6 +464,14 @@ def main() -> None:
             aivishub_client=aivishub_client,
         )
 
+        # DungeonQuest の改造: --quantize_models は、入っているモデルを 8bit に変換して終わる（サーバーは起動しない）
+        if args.quantize_models:
+            from voicevox_engine.tts_pipeline.dq_quantize import quantize_installed_models
+
+            failures = quantize_installed_models(aivm_manager.get_installed_aivm_infos())
+            logger.info(f"DQ_QUANTIZE_DONE failures={failures}")
+            sys.exit(1 if failures > 0 else 0)
+
         # ごく稀に style_bert_vits2_tts_engine.py (が依存する onnxruntime) のインポート自体に失敗し
         # 例外が発生する環境があるようなので、例外をキャッチしてエラーログに出力できるよう、敢えてルーター初期化時にインポートする
         from voicevox_engine.tts_pipeline.style_bert_vits2_tts_engine import (
@@ -460,7 +481,7 @@ def main() -> None:
         # AivisSpeech Engine 独自の StyleBertVITS2TTSEngine を通常の TTSEngine の代わりに利用
         tts_engines = TTSEngineManager()
         tts_engines.register_engine(
-            StyleBertVITS2TTSEngine(aivm_manager, use_gpu, args.load_all_models),
+            StyleBertVITS2TTSEngine(aivm_manager, use_gpu, args.load_all_models, use_quantized_models=args.use_quantized_models),
             MOCK_CORE_VERSION,
         )
 
