@@ -27,7 +27,8 @@ if sys.platform == 'win32':
 
 a = Analysis(
     ['run.py'],
-    pathex=[],
+    # DungeonQuest: onnxruntime.quantization が onnxruntime/transformers の中のモジュール（fusion_utils など）を最上位の名前で読むので、そのフォルダを検索パスに足す
+    pathex=[str(Path(sys.prefix) / 'Lib' / 'site-packages' / 'onnxruntime' / 'transformers')],
     binaries=binaries,
     datas=datas,
     hiddenimports=[],
