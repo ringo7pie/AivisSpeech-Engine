@@ -4,6 +4,7 @@ AivisHub API との通信を行うクライアントと、API スキーマを表
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -220,9 +221,13 @@ class AivisHubClient:
     # API ベース URL
     BASE_URL = "https://api.aivis-project.com/v1"
 
+    # DungeonQuest の改造: AivisHub への通信を止める環境変数（値が 1 のとき無効化。引数 --disable_aivishub の予備）
+    DISABLE_ENV_NAME = "AIVISSPEECH_DISABLE_AIVISHUB"
+
     def __init__(
         self,
         installation_uuid_path: Path | None = None,
+        disabled: bool | None = None,
     ) -> None:
         """
         AivisHubClient を初期化する。
@@ -232,7 +237,17 @@ class AivisHubClient:
         installation_uuid_path : Path | None
             インストール UUID の保存先パス。
             None の場合は get_save_dir() / "installation_uuid.dat" が使われる。
+        disabled : bool | None
+            DungeonQuest の改造: True の場合、AivisHub への通信を一切行わない。
+            None の場合は環境変数 AIVISSPEECH_DISABLE_AIVISHUB の値 (1 で無効化) が使われる。
         """
+
+        # DungeonQuest の改造: 無効化されている場合、各メソッドは通信せずに空の結果を返す
+        ## ハードコードされたフォールバック値 (デフォルトモデル・強制削除ルール) も使わない
+        if disabled is not None:
+            self.disabled = disabled
+        else:
+            self.disabled = os.getenv(self.DISABLE_ENV_NAME, default="") == "1"
 
         if installation_uuid_path is not None:
             self._installation_uuid_path = installation_uuid_path
@@ -268,6 +283,10 @@ class AivisHubClient:
             HTTP リクエストに失敗した場合
         """
 
+        # DungeonQuest の改造: 無効化されている場合はここに到達しないはずだが、念のため通信を拒否する
+        if self.disabled:
+            raise httpx.RequestError("AivisHub access is disabled.")
+
         return httpx.request(
             method=method,
             url=f"{self.BASE_URL}/{path.lstrip('/')}",
@@ -296,6 +315,10 @@ class AivisHubClient:
         list[AivisSpeechDefaultModelProperty]
             AivisSpeech Engine が起動時に自動的にインストールする音声合成モデルの一覧
         """
+
+        # DungeonQuest の改造: 無効化されている場合はデフォルトモデルのインストール・自動更新を行わない
+        if self.disabled:
+            return []
 
         # プリインストール対象の音声合成モデルの定義
         ## 何らかの理由で AivisHub API から情報が取得できなかった場合にフォールバックとして利用する
@@ -355,6 +378,10 @@ class AivisHubClient:
         list[AivisSpeechForcedRemovalRule]
             AivisSpeech Engine で強制的に削除すべき音声合成モデルのバージョン条件
         """
+
+        # DungeonQuest の改造: 無効化されている場合はハードコードされたルールも使わない (何も削除しない)
+        if self.disabled:
+            return []
 
         # 音声合成モデルの強制削除ルールの定義
         ## 何らかの理由で AivisHub API から情報が取得できなかった場合にフォールバックとして利用する
@@ -426,6 +453,10 @@ class AivisHubClient:
         AivmModelResponse | None
             音声合成モデルの詳細情報。取得に失敗した場合やモデルが存在しない場合は None
         """
+
+        # DungeonQuest の改造: 無効化されている場合はアップデートの確認を行わない
+        if self.disabled:
+            return None
 
         # API リクエストを送信
         try:
@@ -537,6 +568,10 @@ class AivisHubClient:
         stack_trace : str | None
             スタックトレース（エラー時のみ、デフォルト: None）
         """
+
+        # DungeonQuest の改造: 無効化されている場合はイベントを送信しない (インストール UUID も生成しない)
+        if self.disabled:
+            return
 
         # ファイル保存先ディレクトリ内にある installation_uuid.dat を読み込み、存在しなければ新しく生成して保存
         installation_uuid = self._ensure_installation_uuid()

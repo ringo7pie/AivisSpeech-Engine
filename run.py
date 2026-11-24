@@ -219,6 +219,7 @@ class _CLIArgs:
     preset_file: Path | None
     disable_mutable_api: bool
     disable_sentry: bool
+    disable_aivishub: bool
     # 以下は極力 VOICEVOX ENGINE との差分を最小限にするための互換用
     # 対応する引数は AivisSpeech Engine では常に無効化されている
     voicevox_dir: Path | None = None  # 常に None
@@ -386,6 +387,18 @@ def read_cli_arguments(envs: Envs) -> _CLIArgs:
         help="Sentry によるエラーログ収集を無効化します。",
     )
 
+    # DungeonQuest の改造: AivisHub (api.aivis-project.com) への通信を止める
+    parser.add_argument(
+        "--disable_aivishub",
+        action="store_true",
+        help=(
+            "AivisHub への通信 (デフォルトモデルの取得と自動更新・強制削除ルールの取得と適用・"
+            "アップデートの確認・起動イベントの送信・URL からのモデルのインストール) を無効化します。"
+            "指定しない場合、代わりに環境変数 AIVISSPEECH_DISABLE_AIVISHUB の値が使われます。"
+            "AIVISSPEECH_DISABLE_AIVISHUB の値が 1 の場合は無効化で、0 または空文字、値がない場合は無視されます。"
+        ),
+    )
+
     args_dict = vars(parser.parse_args())
 
     # NOTE: 複数個の同名引数に基づいてリスト化されるため `CLIArgs` で複数形にリネームされている
@@ -431,7 +444,11 @@ def main() -> None:
 
     # AivisHub API クライアントを初期化
     ## except ブロックからも参照されるため、try の外で生成する
-    aivishub_client = AivisHubClient()
+    ## DungeonQuest の改造: --disable_aivishub または環境変数 AIVISSPEECH_DISABLE_AIVISHUB=1 で通信を止める
+    aivishub_client = AivisHubClient(
+        disabled=args.disable_aivishub
+        or decide_boolean_from_env(AivisHubClient.DISABLE_ENV_NAME)
+    )
 
     try:
         # Sentry によるエラートラッキングを開始 (production 環境のみ有効)
@@ -455,6 +472,7 @@ def main() -> None:
         logger.info(f"AivisSpeech Engine version {__version__}")
         if args.disable_sentry:
             logger.info("Sentry error tracking is disabled.")
+        logger.info(f"DQ_AIVISHUB disabled={aivishub_client.disabled}")
         logger.info(f"Engine root directory: {engine_root()}")
         logger.info(f"User data directory: {get_save_dir()}")
 

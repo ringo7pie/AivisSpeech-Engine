@@ -488,6 +488,16 @@ class AivmManager:
             AIVMX ファイルのダウンロード先 URL
         """
 
+        # DungeonQuest の改造: AivisHub への通信が無効化されている場合、URL からのインストール・更新は拒否する
+        if self._aivishub_client.disabled:
+            logger.error(
+                f"Installing models from URL is disabled by --disable_aivishub. ({download_url})"
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="URL からの音声合成モデルのインストールは無効化されています。(--disable_aivishub)",
+            )
+
         # AivisHub の音声合成モデル詳細ページの URL が渡された場合、特別に AivisHub API を使い AIVMX ファイルをダウンロードする
         if download_url.startswith("https://hub.aivis-project.com/aivm-models/"):
             # URL から AIVM の UUID を抽出
