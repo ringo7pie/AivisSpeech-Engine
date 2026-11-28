@@ -220,6 +220,7 @@ class _CLIArgs:
     disable_mutable_api: bool
     disable_sentry: bool
     disable_aivishub: bool
+    onnx_threads: int | None
     # 以下は極力 VOICEVOX ENGINE との差分を最小限にするための互換用
     # 対応する引数は AivisSpeech Engine では常に無効化されている
     voicevox_dir: Path | None = None  # 常に None
@@ -399,6 +400,18 @@ def read_cli_arguments(envs: Envs) -> _CLIArgs:
         ),
     )
 
+    # DungeonQuest の改造（1.2.0+dq.3）: CPU 推論のスレッドの数を決め、待つ間のスピンを止める
+    parser.add_argument(
+        "--onnx_threads",
+        type=int,
+        default=None,
+        help=(
+            "CPU 推論 (ONNX Runtime) のスレッドの数です。1 以上を指定すると、その数のスレッドで推論し、"
+            "仕事を待つ間に CPU を回し続けるスピンも止めます (同じ PC で動くゲームなどに CPU を残すため)。"
+            "指定しない場合、代わりに環境変数 AIVISSPEECH_ONNX_THREADS の値が使われ、それも無ければ元の動き (物理コアの数・スピンあり) です。"
+        ),
+    )
+
     args_dict = vars(parser.parse_args())
 
     # NOTE: 複数個の同名引数に基づいてリスト化されるため `CLIArgs` で複数形にリネームされている
@@ -489,6 +502,17 @@ def main() -> None:
             failures = quantize_installed_models(aivm_manager.get_installed_aivm_infos())
             logger.info(f"DQ_QUANTIZE_DONE failures={failures}")
             sys.exit(1 if failures > 0 else 0)
+
+        # DungeonQuest の改造（1.2.0+dq.3）: 推論セッションを作る前に、CPU 推論のスレッドの数とスピンを決める
+        onnx_threads = args.onnx_threads
+        if onnx_threads is None:
+            env_threads = os.environ.get("AIVISSPEECH_ONNX_THREADS", "").strip()
+            onnx_threads = int(env_threads) if env_threads.isdigit() else 0
+        if onnx_threads > 0:
+            from voicevox_engine.dq_threads import configure_onnx_threads
+
+            configure_onnx_threads(onnx_threads)
+        logger.info(f"DQ_ONNX_THREADS threads={onnx_threads} spinning={onnx_threads <= 0}")
 
         # ごく稀に style_bert_vits2_tts_engine.py (が依存する onnxruntime) のインポート自体に失敗し
         # 例外が発生する環境があるようなので、例外をキャッチしてエラーログに出力できるよう、敢えてルーター初期化時にインポートする
