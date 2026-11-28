@@ -1,4 +1,6 @@
-# AivisSpeech Engine（DungeonQuest の改造版 1.2.0+dq.3）
+# AivisSpeech Engine（DungeonQuest の改造版 1.2.0+dq.3.dml・GPU 版）
+
+このブランチ `dq/dml` は、`dq/ort132-int8`（1.2.0+dq.3）の onnxruntime を `onnxruntime-directml` 1.24.4 に替えた GPU（DirectML）版です。`--use_gpu` で GPU（Direct3D のアダプターの 0 番）に載せます。DirectML で 8bit のモデル（`--use_quantized_models`）を合成するとエンジンが落ちるので、GPU 版では使いません。CPU で使うと、声のモデルの読み込みは 1 つ約 5 秒かかります（1.32 の CPU 版は約 0.5 秒）。以下は `dq/ort132-int8` の説明です。
 
 このブランチ `dq/ort132-int8` は、[AivisSpeech Engine](https://github.com/Aivis-Project/AivisSpeech-Engine) 1.2.0 に、ゲーム「Demon of the Crown」で使うための小さな改造を加えた物です。ライセンスは元と同じ LGPL-3.0 です。元の README は `README.md` にあります。
 
